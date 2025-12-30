@@ -148,16 +148,12 @@
 
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
     <script>
-        let ZOHO;
-        
         // Initialize the widget
         ZOHO.embeddedApp.on("PageLoad", function(data) {
             initWidget(data);
         });
 
-        ZOHO.embeddedApp.init().then(function() {
-            ZOHO = window.ZOHO;
-        });
+        ZOHO.embeddedApp.init();
 
         async function initWidget(data) {
             try {
