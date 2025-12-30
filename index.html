@@ -157,12 +157,23 @@
 
         async function initWidget(data) {
             try {
+                console.log("Widget data received:", data);
+                
                 // Get the current Account record ID
-                const Entity = data.Entity;
-                const accountId = data.EntityId[0];
+                // Handle different contexts (button vs related list)
+                let accountId;
+                
+                if (data.EntityId && data.EntityId.length > 0) {
+                    accountId = data.EntityId[0];
+                } else if (data.Entity && data.Entity === "Accounts") {
+                    // Try to get ID from alternate location
+                    accountId = data.id;
+                }
+
+                console.log("Account ID:", accountId);
 
                 if (!accountId) {
-                    showError("Unable to retrieve Account ID");
+                    showError("Unable to retrieve Account ID. Data received: " + JSON.stringify(data));
                     return;
                 }
 
@@ -177,6 +188,8 @@
 
         async function fetchRelatedContacts(accountId) {
             try {
+                console.log("Fetching contacts for account:", accountId);
+                
                 // Use searchRecords API instead of COQL
                 const config = {
                     Entity: "Contacts",
@@ -186,9 +199,17 @@
                     per_page: 200
                 };
 
+                console.log("Search config:", config);
                 const response = await ZOHO.CRM.API.searchRecord(config);
                 
                 console.log("API Response:", response);
+                console.log("Response status:", response.status);
+                
+                // Handle 204 no content - means no contacts found
+                if (response.status === 204 || (response.statusText && response.statusText.toLowerCase() === "nocontent")) {
+                    showNoRecords();
+                    return;
+                }
                 
                 if (response.data) {
                     displayContacts(response.data);
