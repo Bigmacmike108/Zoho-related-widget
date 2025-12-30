@@ -2,31 +2,285 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Test Widget</title>
+    <title>Related Contacts</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: white;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .test-box {
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 13px;
+            color: #333;
+            background: #fff;
+            padding: 0;
+        }
+
+        .widget-container {
+            width: 100%;
+            height: 100vh;
+            overflow: auto;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .error {
             padding: 20px;
-            background: #e3f2fd;
-            border: 2px solid #2196f3;
-            border-radius: 4px;
+            color: #d32f2f;
+            background: #ffebee;
+            border-left: 4px solid #d32f2f;
+            margin: 10px;
+        }
+
+        .no-records {
+            padding: 40px 20px;
             text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .contacts-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+        }
+
+        .contacts-table thead {
+            background: #f5f5f5;
+            border-bottom: 2px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .contacts-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .contacts-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+            font-size: 13px;
+        }
+
+        .contacts-table tbody tr {
+            transition: background-color 0.2s;
+        }
+
+        .contacts-table tbody tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        .contact-name {
+            font-weight: 500;
+            color: #1976d2;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-inactive {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .record-count {
+            padding: 12px 16px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
-    <div class="test-box">
-        <h2>Widget Test Successful!</h2>
-        <p>If you can see this, your widget hosting is working correctly.</p>
-        <p id="timestamp"></p>
+    <div class="widget-container">
+        <div id="loading" class="loading">Loading related contacts...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="content" style="display: none;">
+            <div id="recordCount" class="record-count"></div>
+            <table class="contacts-table">
+                <thead>
+                    <tr>
+                        <th>Full Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Active</th>
+                        <th>Age</th>
+                    </tr>
+                </thead>
+                <tbody id="contactsBody">
+                </tbody>
+            </table>
+        </div>
+        <div id="noRecords" class="no-records" style="display: none;">
+            No related contacts found
+        </div>
     </div>
 
+    <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
     <script>
-        document.getElementById('timestamp').textContent = 'Loaded at: ' + new Date().toLocaleString();
+        let ZOHO;
+        
+        // Initialize the widget
+        ZOHO.embeddedApp.on("PageLoad", function(data) {
+            initWidget(data);
+        });
+
+        ZOHO.embeddedApp.init().then(function() {
+            ZOHO = window.ZOHO;
+        });
+
+        async function initWidget(data) {
+            try {
+                // Get the current Account record ID
+                const Entity = data.Entity;
+                const accountId = data.EntityId[0];
+
+                if (!accountId) {
+                    showError("Unable to retrieve Account ID");
+                    return;
+                }
+
+                // Fetch related contacts
+                await fetchRelatedContacts(accountId);
+
+            } catch (error) {
+                console.error("Initialization error:", error);
+                showError("Failed to initialize widget: " + error.message);
+            }
+        }
+
+        async function fetchRelatedContacts(accountId) {
+            try {
+                // COQL query to get contacts related to this account
+                const query = `SELECT First_Name, Last_Name, Email, Phone, Active, Age FROM Contacts WHERE Account_Name = ${accountId} ORDER BY First_Name ASC, Last_Name ASC`;
+
+                const response = await ZOHO.CRM.API.coql(query);
+                
+                if (response.status === "success" && response.data) {
+                    displayContacts(response.data);
+                } else if (response.status === "success" && !response.data) {
+                    showNoRecords();
+                } else {
+                    showError("Failed to fetch contacts: " + JSON.stringify(response));
+                }
+
+            } catch (error) {
+                console.error("Fetch error:", error);
+                showError("Error fetching contacts: " + error.message);
+            }
+        }
+
+        function displayContacts(contacts) {
+            const tbody = document.getElementById("contactsBody");
+            const loading = document.getElementById("loading");
+            const content = document.getElementById("content");
+            const recordCount = document.getElementById("recordCount");
+
+            // Clear existing content
+            tbody.innerHTML = "";
+
+            if (!contacts || contacts.length === 0) {
+                showNoRecords();
+                return;
+            }
+
+            // Display record count
+            recordCount.textContent = `${contacts.length} Contact${contacts.length !== 1 ? 's' : ''}`;
+
+            // Sort contacts by full name (already sorted by COQL query, but this ensures it)
+            contacts.sort((a, b) => {
+                const nameA = `${a.First_Name || ''} ${a.Last_Name || ''}`.trim().toLowerCase();
+                const nameB = `${b.First_Name || ''} ${b.Last_Name || ''}`.trim().toLowerCase();
+                return nameA.localeCompare(nameB);
+            });
+
+            // Create table rows
+            contacts.forEach(contact => {
+                const row = document.createElement("tr");
+                
+                // Full Name
+                const fullName = `${contact.First_Name || ''} ${contact.Last_Name || ''}`.trim() || '—';
+                
+                // Email
+                const email = contact.Email || '—';
+                
+                // Phone
+                const phone = contact.Phone || '—';
+                
+                // Active status
+                const isActive = contact.Active === true || contact.Active === 'true';
+                const activeStatus = contact.Active !== null && contact.Active !== undefined
+                    ? `<span class="status-badge ${isActive ? 'status-active' : 'status-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`
+                    : '—';
+                
+                // Age
+                const age = contact.Age !== null && contact.Age !== undefined ? contact.Age : '—';
+
+                row.innerHTML = `
+                    <td><span class="contact-name">${escapeHtml(fullName)}</span></td>
+                    <td>${escapeHtml(email)}</td>
+                    <td>${escapeHtml(phone)}</td>
+                    <td>${activeStatus}</td>
+                    <td>${escapeHtml(age.toString())}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+
+            // Show content, hide loading
+            loading.style.display = "none";
+            content.style.display = "block";
+        }
+
+        function showNoRecords() {
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("noRecords").style.display = "block";
+        }
+
+        function showError(message) {
+            const loading = document.getElementById("loading");
+            const errorDiv = document.getElementById("error");
+            
+            loading.style.display = "none";
+            errorDiv.textContent = message;
+            errorDiv.style.display = "block";
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
     </script>
 </body>
 </html>
