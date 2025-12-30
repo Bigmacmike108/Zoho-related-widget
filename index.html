@@ -160,13 +160,17 @@
                 console.log("Widget data received:", data);
                 
                 // Get the current Account record ID
-                // Handle different contexts (button vs related list)
                 let accountId;
                 
-                if (data.EntityId && data.EntityId.length > 0) {
-                    accountId = data.EntityId[0];
-                } else if (data.Entity && data.Entity === "Accounts") {
-                    // Try to get ID from alternate location
+                // Handle different data structures
+                if (data.EntityId) {
+                    // EntityId can be either a string (related list) or array (button)
+                    if (Array.isArray(data.EntityId)) {
+                        accountId = data.EntityId[0];
+                    } else {
+                        accountId = data.EntityId;
+                    }
+                } else if (data.Entity && data.id) {
                     accountId = data.id;
                 }
 
@@ -182,7 +186,7 @@
 
             } catch (error) {
                 console.error("Initialization error:", error);
-                showError("Failed to initialize widget: " + error.message);
+                showError("Failed to initialize widget: " + (error.message || JSON.stringify(error)));
             }
         }
 
