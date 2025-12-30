@@ -71,6 +71,31 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             border-bottom: 1px solid #e0e0e0;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        .contacts-table th:hover {
+            background-color: #eeeeee;
+        }
+
+        .contacts-table th.sortable::after {
+            content: ' ⇅';
+            opacity: 0.3;
+            font-size: 14px;
+        }
+
+        .contacts-table th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+            color: #1976d2;
+        }
+
+        .contacts-table th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+            color: #1976d2;
         }
 
         .contacts-table td {
@@ -91,6 +116,13 @@
         .contact-name {
             font-weight: 500;
             color: #1976d2;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .contact-name:hover {
+            text-decoration: underline;
+            color: #1565c0;
         }
 
         .status-badge {
@@ -130,11 +162,11 @@
             <table class="contacts-table">
                 <thead>
                     <tr>
-                        <th>Full Name</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>Active</th>
-                        <th>Age</th>
+                        <th class="sortable" data-column="fullName" data-type="string">Full Name</th>
+                        <th class="sortable" data-column="Email" data-type="string">Email</th>
+                        <th class="sortable" data-column="Phone" data-type="string">Phone</th>
+                        <th class="sortable" data-column="Active" data-type="boolean">Active</th>
+                        <th class="sortable" data-column="Age" data-type="number">Age</th>
                     </tr>
                 </thead>
                 <tbody id="contactsBody">
@@ -150,20 +182,29 @@
     <script>
         // Initialize the widget
         ZOHO.embeddedApp.on("PageLoad", function(data) {
+            console.log("PageLoad event fired with data:", data);
             initWidget(data);
         });
 
         ZOHO.embeddedApp.init();
 
+        let allContacts = []; // Store all contacts for sorting
+        let currentSort = { column: 'fullName', direction: 'asc' };
+
         async function initWidget(data) {
             try {
-                console.log("Widget data received:", data);
+                console.log("initWidget called");
+                console.log("Raw data:", JSON.stringify(data, null, 2));
                 
                 // Get the current Account record ID
                 let accountId;
                 
                 // Handle different data structures
                 if (data.EntityId) {
+                    console.log("EntityId type:", typeof data.EntityId);
+                    console.log("Is array?", Array.isArray(data.EntityId));
+                    console.log("EntityId value:", data.EntityId);
+                    
                     // EntityId can be either a string (related list) or array (button)
                     if (Array.isArray(data.EntityId)) {
                         accountId = data.EntityId[0];
@@ -174,7 +215,8 @@
                     accountId = data.id;
                 }
 
-                console.log("Account ID:", accountId);
+                console.log("Extracted Account ID:", accountId);
+                console.log("Account ID type:", typeof accountId);
 
                 if (!accountId) {
                     showError("Unable to retrieve Account ID. Data received: " + JSON.stringify(data));
@@ -235,6 +277,9 @@
             const content = document.getElementById("content");
             const recordCount = document.getElementById("recordCount");
 
+            // Store contacts globally for sorting
+            allContacts = contacts;
+
             // Clear existing content
             tbody.innerHTML = "";
 
@@ -246,49 +291,136 @@
             // Display record count
             recordCount.textContent = `${contacts.length} Contact${contacts.length !== 1 ? 's' : ''}`;
 
-            // Sort contacts by full name (already sorted by COQL query, but this ensures it)
-            contacts.sort((a, b) => {
-                const nameA = `${a.First_Name || ''} ${a.Last_Name || ''}`.trim().toLowerCase();
-                const nameB = `${b.First_Name || ''} ${b.Last_Name || ''}`.trim().toLowerCase();
-                return nameA.localeCompare(nameB);
+            // Add click handlers to sortable headers
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', function() {
+                    const column = this.getAttribute('data-column');
+                    const type = this.getAttribute('data-type');
+                    sortContacts(column, type);
+                });
+            });
+
+            // Render the contacts
+            renderContacts(contacts);
+
+            // Show content, hide loading
+            loading.style.display = "none";
+            content.style.display = "block";
+        }
+
+        function renderContacts(contacts) {
+            const tbody = document.getElementById("contactsBody");
+            tbody.innerHTML = "";
+
+            // Process each contact for display
+            const processedContacts = contacts.map(contact => {
+                const fullName = `${contact.First_Name || ''} ${contact.Last_Name || ''}`.trim() || '—';
+                const email = contact.Email || '—';
+                const phone = contact.Phone || '—';
+                const isActive = contact.Active === true || contact.Active === 'true';
+                const age = contact.Age !== null && contact.Age !== undefined ? contact.Age : '—';
+                
+                return {
+                    ...contact,
+                    fullName,
+                    email,
+                    phone,
+                    isActive,
+                    age,
+                    displayActive: contact.Active !== null && contact.Active !== undefined
+                        ? `<span class="status-badge ${isActive ? 'status-active' : 'status-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`
+                        : '—'
+                };
             });
 
             // Create table rows
-            contacts.forEach(contact => {
+            processedContacts.forEach(contact => {
                 const row = document.createElement("tr");
                 
-                // Full Name
-                const fullName = `${contact.First_Name || ''} ${contact.Last_Name || ''}`.trim() || '—';
-                
-                // Email
-                const email = contact.Email || '—';
-                
-                // Phone
-                const phone = contact.Phone || '—';
-                
-                // Active status
-                const isActive = contact.Active === true || contact.Active === 'true';
-                const activeStatus = contact.Active !== null && contact.Active !== undefined
-                    ? `<span class="status-badge ${isActive ? 'status-active' : 'status-inactive'}">${isActive ? 'Active' : 'Inactive'}</span>`
-                    : '—';
-                
-                // Age
-                const age = contact.Age !== null && contact.Age !== undefined ? contact.Age : '—';
-
                 row.innerHTML = `
-                    <td><span class="contact-name">${escapeHtml(fullName)}</span></td>
-                    <td>${escapeHtml(email)}</td>
-                    <td>${escapeHtml(phone)}</td>
-                    <td>${activeStatus}</td>
-                    <td>${escapeHtml(age.toString())}</td>
+                    <td><a href="#" class="contact-name" data-contact-id="${contact.id}">${escapeHtml(contact.fullName)}</a></td>
+                    <td>${escapeHtml(contact.email)}</td>
+                    <td>${escapeHtml(contact.phone)}</td>
+                    <td>${contact.displayActive}</td>
+                    <td>${escapeHtml(contact.age.toString())}</td>
                 `;
 
                 tbody.appendChild(row);
             });
 
-            // Show content, hide loading
-            loading.style.display = "none";
-            content.style.display = "block";
+            // Add click handlers to contact name links
+            document.querySelectorAll('.contact-name').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const contactId = this.getAttribute('data-contact-id');
+                    openContactRecord(contactId);
+                });
+            });
+        }
+
+        function sortContacts(column, type) {
+            // Update sort direction
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+
+            // Update header indicators
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            const activeHeader = document.querySelector(`th[data-column="${column}"]`);
+            activeHeader.classList.add(`sort-${currentSort.direction}`);
+
+            // Sort the contacts
+            const sortedContacts = [...allContacts].sort((a, b) => {
+                let aVal, bVal;
+
+                if (column === 'fullName') {
+                    aVal = `${a.First_Name || ''} ${a.Last_Name || ''}`.trim().toLowerCase();
+                    bVal = `${b.First_Name || ''} ${b.Last_Name || ''}`.trim().toLowerCase();
+                } else {
+                    aVal = a[column];
+                    bVal = b[column];
+                }
+
+                // Handle null/undefined values
+                if (aVal === null || aVal === undefined) aVal = '';
+                if (bVal === null || bVal === undefined) bVal = '';
+
+                let comparison = 0;
+                
+                if (type === 'number') {
+                    comparison = (parseFloat(aVal) || 0) - (parseFloat(bVal) || 0);
+                } else if (type === 'boolean') {
+                    const aBool = aVal === true || aVal === 'true';
+                    const bBool = bVal === true || bVal === 'true';
+                    comparison = aBool === bBool ? 0 : (aBool ? -1 : 1);
+                } else {
+                    comparison = aVal.toString().localeCompare(bVal.toString());
+                }
+
+                return currentSort.direction === 'asc' ? comparison : -comparison;
+            });
+
+            renderContacts(sortedContacts);
+        }
+
+        async function openContactRecord(contactId) {
+            try {
+                // Open the contact record in a new tab
+                await ZOHO.CRM.UI.Record.open({
+                    Entity: "Contacts",
+                    RecordID: contactId
+                });
+            } catch (error) {
+                console.error("Error opening contact record:", error);
+                // Fallback: construct URL manually
+                const baseUrl = window.location.origin;
+                window.open(`${baseUrl}/crm/EntityInfo.do?module=Contacts&id=${contactId}`, '_blank');
+            }
         }
 
         function showNoRecords() {
