@@ -177,14 +177,22 @@
 
         async function fetchRelatedContacts(accountId) {
             try {
-                // COQL query to get contacts related to this account
-                const query = `SELECT First_Name, Last_Name, Email, Phone, Active, Age FROM Contacts WHERE Account_Name = ${accountId} ORDER BY First_Name ASC, Last_Name ASC`;
+                // Use searchRecords API instead of COQL
+                const config = {
+                    Entity: "Contacts",
+                    Type: "criteria",
+                    Query: `(Account_Name:equals:${accountId})`,
+                    page: 1,
+                    per_page: 200
+                };
 
-                const response = await ZOHO.CRM.API.coql(query);
+                const response = await ZOHO.CRM.API.searchRecord(config);
                 
-                if (response.status === "success" && response.data) {
+                console.log("API Response:", response);
+                
+                if (response.data) {
                     displayContacts(response.data);
-                } else if (response.status === "success" && !response.data) {
+                } else if (response.info && response.info.count === 0) {
                     showNoRecords();
                 } else {
                     showError("Failed to fetch contacts: " + JSON.stringify(response));
@@ -192,7 +200,7 @@
 
             } catch (error) {
                 console.error("Fetch error:", error);
-                showError("Error fetching contacts: " + error.message);
+                showError("Error fetching contacts: " + (error.message || JSON.stringify(error)));
             }
         }
 
